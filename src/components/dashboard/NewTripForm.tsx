@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { DayPicker, DateRange } from "react-day-picker";
 import { format } from "date-fns";
-import { Plus, X, Wallet, CreditCard, DollarSign } from "lucide-react";
+import { Plus, X, Wallet, CreditCard, DollarSign, Loader2 } from "lucide-react";
 import "react-day-picker/dist/style.css";
 
 interface Destination {
@@ -37,6 +37,7 @@ export default function NewTripForm({ onClose, onSubmit }: NewTripFormProps) {
   ]);
   const [preferences, setPreferences] = useState<string[]>([]);
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const preferenceOptions = [
     "Culture & History",
@@ -73,17 +74,19 @@ export default function NewTripForm({ onClose, onSubmit }: NewTripFormProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setIsSubmitting(true);
 
     if (
       !title ||
       destinations.some((d) => !d.name || !d.startDate || !d.endDate)
     ) {
       setError("Please fill in all required fields");
+      setIsSubmitting(false);
       return;
     }
 
     try {
-      onSubmit({
+      await onSubmit({
         title,
         budget,
         destinations: destinations.map((dest, index) => ({
@@ -96,6 +99,8 @@ export default function NewTripForm({ onClose, onSubmit }: NewTripFormProps) {
       });
     } catch (error) {
       setError("Failed to create trip. Please try again.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -282,9 +287,17 @@ export default function NewTripForm({ onClose, onSubmit }: NewTripFormProps) {
 
         <button
           type="submit"
-          className="w-full px-6 py-3 bg-gradient-to-r from-indigo-600 to-blue-500 text-white font-medium rounded-lg hover:shadow-lg transition-all duration-300"
+          disabled={isSubmitting}
+          className="w-full px-6 py-3 bg-gradient-to-r from-indigo-600 to-blue-500 text-white font-medium rounded-lg hover:shadow-lg transition-all duration-300 disabled:opacity-70"
         >
-          Generate Trip Plan
+          {isSubmitting ? (
+            <>
+              <Loader2 className="h-5 w-5 mr-2 inline animate-spin" />
+              Creating Trip...
+            </>
+          ) : (
+            "Generate Trip Plan"
+          )}
         </button>
       </form>
     </div>

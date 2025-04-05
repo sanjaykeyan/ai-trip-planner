@@ -42,11 +42,22 @@ export async function POST(req: Request) {
       return new NextResponse("Missing required fields", { status: 400 });
     }
 
+    // Calculate the overall trip start and end dates from destinations
+    const allDates = body.destinations.flatMap((dest: any) => [
+      new Date(dest.startDate),
+      new Date(dest.endDate),
+    ]);
+
+    const startDate = new Date(Math.min(...allDates.map((d) => d.getTime())));
+    const endDate = new Date(Math.max(...allDates.map((d) => d.getTime())));
+
     const trip = await prisma.trip.create({
       data: {
         userId,
         title: body.title,
-        budget: body.budget || 0,
+        startDate,
+        endDate,
+        budget: body.budget || "MEDIUM",
         preferences: body.preferences || [],
         destinations: {
           create: body.destinations.map((dest: any, index: number) => ({
@@ -61,9 +72,6 @@ export async function POST(req: Request) {
         destinations: true,
       },
     });
-
-    // Here you would call your AI service to generate the itinerary
-    // Add activities and accommodations based on AI recommendations
 
     return NextResponse.json(trip);
   } catch (error) {
