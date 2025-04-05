@@ -1,33 +1,55 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { UserButton, useUser } from "@clerk/nextjs";
-import { PlusCircle, Map, Calendar, ChevronRight, Compass } from "lucide-react";
+import { PlusCircle, Compass } from "lucide-react";
 import TripCard from "@/components/dashboard/TripCard";
 import NewTripForm from "@/components/dashboard/NewTripForm";
 import TripDetails from "@/components/dashboard/TripDetails";
 
-const mockTrips = [
-  {
-    id: 1,
-    title: "Hawaiian Island Adventure",
-    date: "June 12 - 24",
-    destinations: ["Honolulu", "Maui", "Kauai"],
-    status: "upcoming",
-  },
-  {
-    id: 2,
-    title: "European Getaway",
-    date: "August 15 - 30",
-    destinations: ["Paris", "Rome", "Barcelona"],
-    status: "planning",
-  },
-];
-
 export default function Dashboard() {
   const { user } = useUser();
+  const [trips, setTrips] = useState([]);
   const [selectedTrip, setSelectedTrip] = useState(null);
   const [showNewTripForm, setShowNewTripForm] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchTrips();
+  }, []);
+
+  const fetchTrips = async () => {
+    try {
+      const response = await fetch("/api/trips");
+      const data = await response.json();
+      setTrips(data);
+    } catch (error) {
+      console.error("Error fetching trips:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateTrip = async (tripData: any) => {
+    try {
+      const response = await fetch("/api/trips", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(tripData),
+      });
+
+      if (!response.ok) throw new Error("Failed to create trip");
+
+      const newTrip = await response.json();
+      setTrips([newTrip, ...trips]);
+      setShowNewTripForm(false);
+      setSelectedTrip(newTrip);
+    } catch (error) {
+      console.error("Error creating trip:", error);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 flex">
@@ -59,17 +81,23 @@ export default function Dashboard() {
           </div>
 
           <div className="space-y-3">
-            {mockTrips.map((trip) => (
-              <TripCard
-                key={trip.id}
-                trip={trip}
-                isSelected={selectedTrip?.id === trip.id}
-                onClick={() => {
-                  setSelectedTrip(trip);
-                  setShowNewTripForm(false);
-                }}
-              />
-            ))}
+            {loading ? (
+              <div className="text-center py-4 text-gray-500">Loading...</div>
+            ) : trips.length === 0 ? (
+              <div className="text-center py-4 text-gray-500">No trips yet</div>
+            ) : (
+              trips.map((trip) => (
+                <TripCard
+                  key={trip.id}
+                  trip={trip}
+                  isSelected={selectedTrip?.id === trip.id}
+                  onClick={() => {
+                    setSelectedTrip(trip);
+                    setShowNewTripForm(false);
+                  }}
+                />
+              ))
+            )}
           </div>
         </div>
       </div>
@@ -77,7 +105,10 @@ export default function Dashboard() {
       {/* Main Content */}
       <div className="flex-1 p-8">
         {showNewTripForm ? (
-          <NewTripForm onClose={() => setShowNewTripForm(false)} />
+          <NewTripForm
+            onClose={() => setShowNewTripForm(false)}
+            onSubmit={handleCreateTrip}
+          />
         ) : selectedTrip ? (
           <TripDetails trip={selectedTrip} />
         ) : (
