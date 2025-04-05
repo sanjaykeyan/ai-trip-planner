@@ -16,44 +16,51 @@ export async function POST(request: Request) {
 
     const tripData = await request.json();
 
-    const prompt = `Create a detailed trip plan based on the following information:
-    Trip Title: ${tripData.title}
-    Budget Level: ${tripData.budget}
-    Preferences: ${tripData.preferences.join(", ")}
-    
-    Destinations:
-    ${tripData.destinations
+    const prompt = `You are a travel planner creating an itinerary. Return ONLY valid JSON with no additional text, comments, or backticks.
+
+    Trip Details:
+    - Title: ${tripData.title}
+    - Budget: ${tripData.budget}
+    - Preferences: ${tripData.preferences.join(", ")}
+    - Destinations: ${tripData.destinations
       .map(
-        (dest: any) =>
-          `- ${dest.name} (${new Date(
+        (dest) =>
+          `${dest.name} (${new Date(
             dest.startDate
           ).toLocaleDateString()} to ${new Date(
             dest.endDate
           ).toLocaleDateString()})`
       )
-      .join("\n")}
+      .join(", ")}
 
-    Return ONLY a JSON object in this exact format (no markdown, no backticks):
+    The JSON must follow this exact structure:
     {
-      "overview": "Brief overview of the entire trip",
-      "tips": ["tip1", "tip2", "tip3"],
-      "dailyPlans": [
+      "overview": "Brief overview of the trip",
+      "totalBudget": "Estimated cost in USD",
+      "dailyItinerary": [
         {
           "date": "YYYY-MM-DD",
-          "activities": {
-            "morning": ["activity1", "activity2"],
-            "afternoon": ["activity1", "activity2"],
-            "evening": ["activity1", "activity2"]
-          },
-          "transportation": ["transport tip1", "transport tip2"],
-          "accommodation": "Hotel/accommodation details",
-          "diningRecommendations": {
-            "breakfast": "Breakfast spot",
-            "lunch": "Lunch spot",
-            "dinner": "Dinner spot"
-          }
+          "dayNumber": 1,
+          "location": "City, Country",
+          "events": [
+            {
+              "name": "Activity name",
+              "startTime": "HH:MM",
+              "duration": "X hours",
+              "cost": "$XX",
+              "description": "Brief description",
+              "type": "attraction",
+              "bookingRequired": false,
+              "bookingUrl": ""
+            }
+          ]
         }
-      ]
+      ],
+      "practicalInfo": {
+        "transportation": ["Transport tip 1"],
+        "documentation": ["Document 1"],
+        "packingList": ["Item 1"]
+      }
     }`;
 
     const completion = await groq.chat.completions.create({
@@ -61,12 +68,12 @@ export async function POST(request: Request) {
         {
           role: "system",
           content:
-            "You are a travel planner. Always respond with valid JSON only, no additional text or formatting.",
+            "You are a JSON-generating assistant. Output only valid JSON without any markdown formatting, explanations, or code blocks.",
         },
         { role: "user", content: prompt },
       ],
-      model: "mixtral-8x7b-32768", // Using Mixtral instead of Llama
-      temperature: 0.7,
+      model: "llama-3.3-70b-versatile", // Switch to Mixtral for better JSON output
+      temperature: 0.5, // Lower temperature for more consistent output
       max_tokens: 4096,
     });
 
@@ -76,15 +83,60 @@ export async function POST(request: Request) {
       throw new Error("No plan generated");
     }
 
-    // Clean the response and validate JSON
-    const cleanedPlan = rawPlan.trim().replace(/```json\n?|\n?```/g, "");
+    // More aggressive cleaning of the response
+    let cleanedPlan = rawPlan
+      .trim()
+      .replace(/```json\s*|```\s*|`/g, "") // Remove markdown code blocks and backticks
+      .replace(/(\r\n|\n|\r)/gm, " ") // Replace newlines with spaces
+      .replace(/\s+/g, " ") // Replace multiple spaces with single space
+      .trim();
+
+    // Extract JSON if there's surrounding text
+    const jsonMatch = cleanedPlan.match(/({.*})/);
+    if (jsonMatch && jsonMatch[1]) {
+      cleanedPlan = jsonMatch[1];
+    }
 
     try {
+      // Attempt to parse the JSON
       const parsedPlan = JSON.parse(cleanedPlan);
-      return NextResponse.json({ plan: cleanedPlan });
+
+      // Validate required fields
+      if (
+        !parsedPlan.overview ||
+        !parsedPlan.totalBudget ||
+        !Array.isArray(parsedPlan.dailyItinerary) ||
+        !parsedPlan.practicalInfo
+      ) {
+        throw new Error("Missing required fields in JSON");
+      }
+
+      // Return the valid JSON
+      return NextResponse.json({ plan: JSON.stringify(parsedPlan) });
     } catch (parseError) {
       console.error("JSON Parse Error:", parseError);
-      throw new Error("Invalid JSON response from AI");
+      console.error("Raw response:", rawPlan);
+      console.error("Cleaned response:", cleanedPlan);
+
+      // Create a fallback plan with minimal structure if possible
+      return NextResponse.json({
+        plan: JSON.stringify({
+          overview:
+            "We were unable to generate a detailed plan. Please try again.",
+          totalBudget: "Unknown",
+          dailyItinerary: tripData.destinations.map((dest, index) => ({
+            date: new Date(dest.startDate).toISOString().split("T")[0],
+            dayNumber: index + 1,
+            location: dest.name,
+            events: [],
+          })),
+          practicalInfo: {
+            transportation: ["No information available"],
+            documentation: ["No information available"],
+            packingList: ["No information available"],
+          },
+        }),
+      });
     }
   } catch (error: any) {
     console.error("Error:", error);
