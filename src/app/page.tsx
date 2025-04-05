@@ -1,6 +1,9 @@
 // pages/index.js
+"use client";
+
 import React from "react";
 import Head from "next/head";
+import { useRouter } from "next/navigation";
 import {
   Calendar,
   Map,
@@ -18,8 +21,11 @@ import {
   Zap,
   Globe,
 } from "lucide-react";
+import AuthButtons from "@/components/auth/AuthButtons";
 
 export default function Home() {
+  const router = useRouter();
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] to-[#f0f7ff] text-gray-900 selection:bg-indigo-500 selection:text-white">
       <Head>
@@ -72,17 +78,7 @@ export default function Home() {
           </a>
         </div>
 
-        <div className="flex items-center space-x-4">
-          <button className="hidden sm:block px-4 py-2 text-gray-600 hover:text-indigo-600 font-medium text-sm transition-colors duration-300">
-            Log in
-          </button>
-          <button className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-500 text-white text-sm font-medium rounded-lg hover:shadow-lg hover:from-indigo-500 hover:to-blue-600 transition-all duration-300 transform hover:-translate-y-0.5">
-            Join Free
-          </button>
-          <button className="md:hidden">
-            <Menu className="h-6 w-6 text-gray-700" />
-          </button>
-        </div>
+        <AuthButtons />
       </nav>
       {/* Enhanced Hero Section */}
       <section className="py-20 md:py-28 px-6 md:px-12 lg:px-24 relative overflow-hidden">
@@ -522,8 +518,6 @@ export default function Home() {
           </div>
         </div>
       </section>
-      {/* Testimonials and CTA sections - similar enhancements */}
-      // ...existing code...
     </div>
   );
 }
