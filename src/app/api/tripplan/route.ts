@@ -10,6 +10,19 @@ export async function POST(request: Request) {
   }
 
   try {
+    // Move calculateTotalBudget function to the top of try block
+    const calculateTotalBudget = (itinerary) => {
+      let total = 0;
+      itinerary.forEach(day => {
+        day.events.forEach(event => {
+          // Extract numeric value from cost string (e.g., "$20" -> 20)
+          const cost = parseFloat(event.cost.replace(/[^0-9.]/g, '')) || 0;
+          total += cost;
+        });
+      });
+      return total;
+    };
+
     const groq = new Groq({
       apiKey: process.env.GROQ_API_KEY,
     });
@@ -201,6 +214,8 @@ export async function POST(request: Request) {
     }
 
     if (parsedPlan) {
+      const aiPlanTotalCost = calculateTotalBudget(parsedPlan.dailyItinerary);
+      parsedPlan.totalBudget = `$${aiPlanTotalCost}`;
       return NextResponse.json({ plan: JSON.stringify(parsedPlan) });
     }
 
@@ -269,9 +284,10 @@ export async function POST(request: Request) {
       };
     };
 
+    // Modify the fallback plan creation to use calculated budget
     const fallbackPlan = {
-      overview: `A ${tripData.destinations.length}-day trip to ${tripData.destinations.map(d => d.name).join(", ")} with a budget of ${tripData.budget}. This fallback plan includes main meals and activities each day.`,
-      totalBudget: tripData.budget || "Budget not specified",
+      overview: `A ${tripData.destinations.length}-day trip to ${tripData.destinations.map(d => d.name).join(", ")} with a budget of ${tripData.budget}.`,
+      totalBudget: "", // Will be set after calculating
       dailyItinerary: tripData.destinations.flatMap((dest) => {
         const start = new Date(dest.startDate);
         const end = new Date(dest.endDate);
@@ -293,6 +309,10 @@ export async function POST(request: Request) {
         packingList: ["Comfortable walking shoes", "Weather-appropriate clothing", "Medications", "Travel adapters"]
       }
     };
+
+    // Calculate and set the total budget
+    const totalCost = calculateTotalBudget(fallbackPlan.dailyItinerary);
+    fallbackPlan.totalBudget = `$${totalCost}`;
 
     return NextResponse.json({ plan: JSON.stringify(fallbackPlan) });
 
