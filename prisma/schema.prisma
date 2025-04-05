@@ -8,16 +8,26 @@ datasource db {
   directUrl = env("DIRECT_URL") // Add this for better performance with Prisma
 }
 
+enum BudgetRange {
+  LOW
+  MEDIUM
+  HIGH
+}
+
 model Trip {
-  id          String   @id @default(cuid())
+  id          String      @id @default(cuid())
   title       String
   startDate   DateTime
   endDate     DateTime
-  status      String   @default("planning")
+  status      String      @default("planning")
   userId      String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  budget      BudgetRange @default(MEDIUM)
+  preferences String[]    @default([])
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
   destinations TripDestination[]
+  activities   Activity[]
+  accommodations Accommodation[]
 }
 
 model TripDestination {
@@ -28,8 +38,48 @@ model TripDestination {
   startDate   DateTime
   endDate     DateTime
   order       Int
+  activities  Activity[]
+  accommodation Accommodation[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@index([tripId])
+}
+
+model Activity {
+  id          String   @id @default(cuid())
+  tripId      String
+  trip        Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  destinationId String
+  destination TripDestination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+  name        String
+  description String
+  date        DateTime
+  startTime   String?
+  endTime     String?
+  cost        Float
+  type        String
+  location    String?
+  notes       String?
+  
+  @@index([tripId])
+  @@index([destinationId])
+}
+
+model Accommodation {
+  id          String   @id @default(cuid())
+  tripId      String
+  trip        Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  destinationId String
+  destination TripDestination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+  name        String
+  address     String
+  checkIn     DateTime
+  checkOut    DateTime
+  cost        Float
+  bookingUrl  String?
+  notes       String?
+
+  @@index([tripId])
+  @@index([destinationId])
 }

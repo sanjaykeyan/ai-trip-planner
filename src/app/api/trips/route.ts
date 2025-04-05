@@ -37,7 +37,8 @@ export async function POST(req: Request) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    if (!body.title || !body.startDate || !body.endDate || !body.destinations) {
+    // Validate required fields
+    if (!body.title || !body.destinations?.length) {
       return new NextResponse("Missing required fields", { status: 400 });
     }
 
@@ -45,8 +46,8 @@ export async function POST(req: Request) {
       data: {
         userId,
         title: body.title,
-        startDate: new Date(body.startDate),
-        endDate: new Date(body.endDate),
+        budget: body.budget || 0,
+        preferences: body.preferences || [],
         destinations: {
           create: body.destinations.map((dest: any, index: number) => ({
             name: dest.name,
@@ -60,6 +61,9 @@ export async function POST(req: Request) {
         destinations: true,
       },
     });
+
+    // Here you would call your AI service to generate the itinerary
+    // Add activities and accommodations based on AI recommendations
 
     return NextResponse.json(trip);
   } catch (error) {

@@ -6,6 +6,7 @@ interface TripCardProps {
     title: string;
     startDate: string;
     endDate: string;
+    budget: "LOW" | "MEDIUM" | "HIGH";
     destinations: Array<{
       id: string;
       name: string;
