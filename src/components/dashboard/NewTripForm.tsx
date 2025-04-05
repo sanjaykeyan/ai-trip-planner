@@ -3,6 +3,7 @@ import { DayPicker, DateRange } from "react-day-picker";
 import { format } from "date-fns";
 import { Plus, X, Wallet, CreditCard, DollarSign, Loader2 } from "lucide-react";
 import "react-day-picker/dist/style.css";
+import { formatTripPlan } from "@/utils/tripPlanFormatter";
 
 interface Destination {
   name: string;
@@ -120,6 +121,121 @@ export default function NewTripForm({ onClose, onSubmit }: NewTripFormProps) {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const renderFormattedPlan = (plan: string) => {
+    const formatted = formatTripPlan(plan);
+
+    return (
+      <div className="space-y-8">
+        {/* Overview Section */}
+        <div className="bg-gradient-to-r from-indigo-50 to-blue-50 p-6 rounded-lg">
+          <h4 className="font-semibold text-gray-900 mb-3">Trip Overview</h4>
+          <p className="text-gray-700">{formatted.overview}</p>
+        </div>
+
+        {/* Tips Section */}
+        <div className="bg-white p-6 rounded-lg border border-gray-200">
+          <h4 className="font-semibold text-gray-900 mb-3">Travel Tips</h4>
+          <ul className="list-disc list-inside space-y-2">
+            {formatted.tips.map((tip, index) => (
+              <li key={index} className="text-gray-700">
+                {tip}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Daily Plans */}
+        <div className="space-y-6">
+          {formatted.dailyPlans.map((day, index) => (
+            <div
+              key={index}
+              className="bg-white p-6 rounded-lg border border-gray-200"
+            >
+              <h4 className="font-semibold text-gray-900 mb-4">
+                Day {index + 1} - {new Date(day.date).toLocaleDateString()}
+              </h4>
+
+              {/* Activities */}
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                <div>
+                  <h5 className="font-medium text-gray-800 mb-2">Morning</h5>
+                  <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                    {day.activities.morning.map((activity, i) => (
+                      <li key={i}>{activity}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <h5 className="font-medium text-gray-800 mb-2">Afternoon</h5>
+                  <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                    {day.activities.afternoon.map((activity, i) => (
+                      <li key={i}>{activity}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <h5 className="font-medium text-gray-800 mb-2">Evening</h5>
+                  <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                    {day.activities.evening.map((activity, i) => (
+                      <li key={i}>{activity}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+
+              {/* Dining */}
+              <div className="mb-4">
+                <h5 className="font-medium text-gray-800 mb-2">
+                  Dining Recommendations
+                </h5>
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-500">Breakfast:</span>
+                    <p className="text-gray-700">
+                      {day.diningRecommendations.breakfast}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Lunch:</span>
+                    <p className="text-gray-700">
+                      {day.diningRecommendations.lunch}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Dinner:</span>
+                    <p className="text-gray-700">
+                      {day.diningRecommendations.dinner}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Transportation & Accommodation */}
+              <div className="text-sm">
+                <h5 className="font-medium text-gray-800 mb-2">
+                  Transportation
+                </h5>
+                <ul className="list-disc list-inside text-gray-600 mb-2">
+                  {day.transportation.map((tip, i) => (
+                    <li key={i}>{tip}</li>
+                  ))}
+                </ul>
+                {day.accommodation && (
+                  <>
+                    <h5 className="font-medium text-gray-800 mb-2">
+                      Accommodation
+                    </h5>
+                    <p className="text-gray-600">{day.accommodation}</p>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -361,13 +477,9 @@ export default function NewTripForm({ onClose, onSubmit }: NewTripFormProps) {
       {generatedPlan && (
         <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            AI Generated Trip Plan
+            Your Trip Plan
           </h3>
-          <div className="prose max-w-none">
-            <pre className="whitespace-pre-wrap text-sm text-gray-700">
-              {generatedPlan}
-            </pre>
-          </div>
+          {renderFormattedPlan(generatedPlan)}
           <div className="mt-4 flex justify-end">
             <button
               onClick={() =>

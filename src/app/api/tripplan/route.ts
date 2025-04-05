@@ -33,28 +33,59 @@ export async function POST(request: Request) {
       )
       .join("\n")}
 
-    Please provide a detailed day-by-day itinerary, including recommended activities, places to visit, dining suggestions, and transportation tips.`;
+    Return ONLY a JSON object in this exact format (no markdown, no backticks):
+    {
+      "overview": "Brief overview of the entire trip",
+      "tips": ["tip1", "tip2", "tip3"],
+      "dailyPlans": [
+        {
+          "date": "YYYY-MM-DD",
+          "activities": {
+            "morning": ["activity1", "activity2"],
+            "afternoon": ["activity1", "activity2"],
+            "evening": ["activity1", "activity2"]
+          },
+          "transportation": ["transport tip1", "transport tip2"],
+          "accommodation": "Hotel/accommodation details",
+          "diningRecommendations": {
+            "breakfast": "Breakfast spot",
+            "lunch": "Lunch spot",
+            "dinner": "Dinner spot"
+          }
+        }
+      ]
+    }`;
 
     const completion = await groq.chat.completions.create({
       messages: [
         {
           role: "system",
-          content: "You are a helpful travel planner assistant.",
+          content:
+            "You are a travel planner. Always respond with valid JSON only, no additional text or formatting.",
         },
         { role: "user", content: prompt },
       ],
-      model: "llama-3.3-70b-versatile",
+      model: "mixtral-8x7b-32768", // Using Mixtral instead of Llama
       temperature: 0.7,
       max_tokens: 4096,
     });
 
-    const plan = completion.choices[0]?.message?.content;
+    const rawPlan = completion.choices[0]?.message?.content;
 
-    if (!plan) {
+    if (!rawPlan) {
       throw new Error("No plan generated");
     }
 
-    return NextResponse.json({ plan });
+    // Clean the response and validate JSON
+    const cleanedPlan = rawPlan.trim().replace(/```json\n?|\n?```/g, "");
+
+    try {
+      const parsedPlan = JSON.parse(cleanedPlan);
+      return NextResponse.json({ plan: cleanedPlan });
+    } catch (parseError) {
+      console.error("JSON Parse Error:", parseError);
+      throw new Error("Invalid JSON response from AI");
+    }
   } catch (error: any) {
     console.error("Error:", error);
     return NextResponse.json(
