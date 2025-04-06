@@ -64,25 +64,64 @@ export default function TripDetails({ trip }: TripDetailsProps) {
 
     let plan;
     try {
+      // Normalize the data structure regardless of where it comes from
       const parsedData = JSON.parse(trip.aiPlan);
+      console.log("Raw parsed plan data:", parsedData);
 
-      // Handle both direct plan data and variant structure
+      // Handle different possible data structures
       if (
+        parsedData.plans &&
+        parsedData.plans.variants &&
+        parsedData.plans.variants.length > 0
+      ) {
+        // Direct API response format
+        plan = parsedData.plans.variants[0].plan;
+        console.log("Using plan from API response variant:", plan);
+      } else if (
         parsedData.variants &&
         Array.isArray(parsedData.variants) &&
         parsedData.variants.length > 0
       ) {
-        // If we have variants, use the first variant's plan
+        // Stored variant format
         plan = parsedData.variants[0].plan;
-        console.log("Using plan from variant:", plan);
+        console.log("Using plan from stored variant:", plan);
       } else if (parsedData.dailyItinerary) {
         // Direct plan data
         plan = parsedData;
         console.log("Using direct plan:", plan);
       } else {
-        console.error("Unexpected plan structure:", parsedData);
-        throw new Error("Invalid plan structure");
+        // Try to find plan data in any nested structure
+        for (const key in parsedData) {
+          if (parsedData[key] && typeof parsedData[key] === "object") {
+            if (parsedData[key].dailyItinerary && parsedData[key].weather) {
+              plan = parsedData[key];
+              console.log("Found plan in nested structure:", plan);
+              break;
+            }
+          }
+        }
+
+        if (!plan) {
+          console.error("Unexpected plan structure:", parsedData);
+          throw new Error("Invalid plan structure");
+        }
       }
+
+      // Ensure we always have weather data
+      if (!plan.weather) {
+        console.warn("No weather data found in plan, adding default");
+        plan.weather = {
+          temperature: 22,
+          condition: "Partly Cloudy",
+          icon: "https://openweathermap.org/img/wn/02d@2x.png",
+          humidity: 65,
+          windSpeed: 12,
+        };
+      }
+
+      // Log the final plan structure we're using
+      console.log("Final plan structure for rendering:", plan);
+      console.log("Weather data:", plan.weather);
     } catch (error) {
       console.error("Failed to parse trip plan:", error);
       return (
