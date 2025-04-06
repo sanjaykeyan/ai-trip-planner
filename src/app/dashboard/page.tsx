@@ -21,10 +21,16 @@ export default function Dashboard() {
   const fetchTrips = async () => {
     try {
       const response = await fetch("/api/trips");
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to fetch trips");
+      }
       const data = await response.json();
       setTrips(data);
     } catch (error) {
       console.error("Error fetching trips:", error);
+      // Optionally set an error state here to show to the user
+      setTrips([]); // Set empty array to prevent undefined errors
     } finally {
       setLoading(false);
     }
