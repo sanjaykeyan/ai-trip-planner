@@ -13,7 +13,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import "react-day-picker/dist/style.css";
-import { formatTripPlan } from "@/utils/tripPlanFormatter";
+import { formatTripPlan, TripPlans } from "@/utils/tripPlanFormatter";
 
 interface Destination {
   name: string;
@@ -52,6 +52,8 @@ export default function NewTripForm({ onClose, onSubmit }: NewTripFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [generatedPlan, setGeneratedPlan] = useState<string>("");
   const [isFormMinimized, setIsFormMinimized] = useState(false);
+  const [generatedPlans, setGeneratedPlans] = useState<TripPlans | null>(null);
+  const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
 
   const preferenceOptions = [
     "Culture & History",
@@ -121,10 +123,11 @@ export default function NewTripForm({ onClose, onSubmit }: NewTripFormProps) {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to generate trip plan");
+        throw new Error(data.error || "Failed to generate trip plans");
       }
 
-      setGeneratedPlan(data.plan);
+      setGeneratedPlans(data.plans);
+      setSelectedPlanId(data.plans.variants[0].id);
       setIsFormMinimized(true);
     } catch (error: any) {
       setError(error.message || "Failed to create trip. Please try again.");
@@ -258,6 +261,55 @@ export default function NewTripForm({ onClose, onSubmit }: NewTripFormProps) {
         </div>
       );
     }
+  };
+
+  const PlanVariantSelector = () => {
+    const categoryLabels = {
+      LOW: "Budget-Friendly Options",
+      MEDIUM: "Moderate Options",
+      HIGH: "Luxury Options",
+    };
+
+    return (
+      <div className="space-y-8">
+        {Object.entries(categoryLabels).map(([category, label]) => {
+          const categoryVariants = generatedPlans?.variants.filter(
+            (v) => v.category === category
+          );
+
+          if (categoryVariants?.length === 0) return null;
+
+          return (
+            <div key={category}>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">{label}</h3>
+              <div className="grid grid-cols-3 gap-4">
+                {categoryVariants?.map((variant) => (
+                  <button
+                    key={variant.id}
+                    onClick={() => setSelectedPlanId(variant.id)}
+                    className={`p-4 rounded-lg border-2 text-left ${
+                      selectedPlanId === variant.id
+                        ? "border-indigo-500 bg-indigo-50"
+                        : "border-gray-200 hover:border-indigo-300"
+                    }`}
+                  >
+                    <h4 className="font-medium text-gray-900 mb-2">
+                      {variant.name}
+                    </h4>
+                    <p className="text-sm text-gray-500 mb-2">
+                      {variant.description}
+                    </p>
+                    <div className="text-sm text-gray-600">
+                      {variant.plan.totalBudget} • {variant.plan.dailyItinerary.length} days
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
   };
 
   return (
@@ -495,34 +547,48 @@ export default function NewTripForm({ onClose, onSubmit }: NewTripFormProps) {
         )}
       </div>
 
-      {/* Generated Plan */}
-      {generatedPlan && (
+      {/* Generated Plans */}
+      {generatedPlans && (
         <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            Your Trip Plan
+            Choose Your Trip Plan
           </h3>
-          {renderFormattedPlan(generatedPlan)}
-          <div className="mt-4 flex justify-end">
-            <button
-              onClick={() =>
-                onSubmit({
-                  title,
-                  budget,
-                  destinations: destinations.map((dest, index) => ({
-                    name: dest.name,
-                    startDate: dest.startDate!.toISOString(),
-                    endDate: dest.endDate!.toISOString(),
-                    order: index,
-                  })),
-                  preferences,
-                  aiPlan: generatedPlan,
-                })
-              }
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
-            >
-              Save Trip
-            </button>
-          </div>
+          <PlanVariantSelector />
+          {selectedPlanId && (
+            <>
+              {renderFormattedPlan(
+                JSON.stringify(
+                  generatedPlans.variants.find((v) => v.id === selectedPlanId)
+                    ?.plan
+                )
+              )}
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={() =>
+                    onSubmit({
+                      title,
+                      budget,
+                      destinations: destinations.map((dest, index) => ({
+                        name: dest.name,
+                        startDate: dest.startDate!.toISOString(),
+                        endDate: dest.endDate!.toISOString(),
+                        order: index,
+                      })),
+                      preferences,
+                      aiPlan: JSON.stringify(
+                        generatedPlans.variants.find(
+                          (v) => v.id === selectedPlanId
+                        )?.plan
+                      ),
+                    })
+                  }
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+                >
+                  Save Trip
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

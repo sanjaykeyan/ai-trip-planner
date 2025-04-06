@@ -27,6 +27,18 @@ export interface TripPlan {
   };
 }
 
+export interface TripPlanVariant {
+  id: number;
+  name: string;
+  category: "LOW" | "MEDIUM" | "HIGH";
+  description: string;
+  plan: TripPlan;
+}
+
+export interface TripPlans {
+  variants: TripPlanVariant[];
+}
+
 export function formatTripPlan(rawPlan: string): TripPlan {
   try {
     const defaultPlan: TripPlan = {
@@ -46,5 +58,19 @@ export function formatTripPlan(rawPlan: string): TripPlan {
   } catch (error) {
     console.error("Trip plan parsing error:", error);
     throw new Error("Invalid plan structure");
+  }
+}
+
+export function formatTripPlans(rawPlans: string): TripPlans {
+  try {
+    const defaultPlans: TripPlans = {
+      variants: [],
+    };
+
+    const parsed = JSON.parse(rawPlans);
+    return parsed;
+  } catch (error) {
+    console.error("Trip plans parsing error:", error);
+    throw new Error("Invalid plans structure");
   }
 }
