@@ -7,7 +7,7 @@ export async function GET() {
     const { userId } = await auth();
 
     if (!userId) {
-      return new NextResponse("Unauthorized", { status: 401 });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const trips = await prisma.trip.findMany({
@@ -24,7 +24,11 @@ export async function GET() {
 
     return NextResponse.json(trips);
   } catch (error) {
-    return new NextResponse("Internal Error", { status: 500 });
+    console.error("Error fetching trips:", error);
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }
 
@@ -59,6 +63,7 @@ export async function POST(req: Request) {
         endDate,
         budget: body.budget || "MEDIUM",
         preferences: body.preferences || [],
+        aiPlan: body.aiPlan || null,
         destinations: {
           create: body.destinations.map((dest: any, index: number) => ({
             name: dest.name,

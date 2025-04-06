@@ -23,6 +23,7 @@ model Trip {
   userId      String
   budget      BudgetRange @default(MEDIUM)
   preferences String[]    @default([])
+  aiPlan      String?     // Add this field to store the JSON plan
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   destinations TripDestination[]
