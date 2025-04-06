@@ -12,9 +12,9 @@ export async function POST(request: Request) {
   try {
     const calculateTotalBudget = (itinerary) => {
       let total = 0;
-      itinerary.forEach(day => {
-        day.events.forEach(event => {
-          const cost = parseFloat(event.cost.replace(/[^0-9.]/g, '')) || 0;
+      itinerary.forEach((day) => {
+        day.events.forEach((event) => {
+          const cost = parseFloat(event.cost.replace(/[^0-9.]/g, "")) || 0;
           total += cost;
         });
       });
@@ -48,6 +48,13 @@ export async function POST(request: Request) {
     {
       "overview": "Brief overview of the trip",
       "totalBudget": "Estimated cost in USD",
+      "weather": {
+        "temperature": 25,
+        "condition": "Sunny",
+        "icon": "https://openweathermap.org/img/wn/01d@2x.png",
+        "humidity": 65,
+        "windSpeed": 10
+      },
       "dailyItinerary": [
         {
           "date": "YYYY-MM-DD",
@@ -114,6 +121,24 @@ export async function POST(request: Request) {
       }
     }
     
+    IMPORTANT WEATHER INFORMATION:
+    - Include realistic weather information for ${
+      tripData.destinations[0]?.name
+    } on arrival date (${new Date(
+      tripData.destinations[0]?.startDate
+    ).toLocaleDateString()})
+    - Weather temperature should be in Celsius and realistic for the destination and season
+    - Weather condition should be one of: Sunny, Partly Cloudy, Cloudy, Light Rain, Thunderstorm, Snowy, Windy, Clear
+    - Use appropriate weather icon URLs from OpenWeatherMap (https://openweathermap.org/img/wn/[code]@2x.png) where codes are:
+      - 01d: Sunny/Clear
+      - 02d: Partly Cloudy
+      - 03d: Cloudy
+      - 10d: Light Rain
+      - 11d: Thunderstorm
+      - 13d: Snowy
+      - 50d: Windy/Foggy
+    - Include realistic humidity percentage (0-100) and wind speed in km/h
+    
     IMPORTANT: Every day in the dailyItinerary MUST include breakfast, lunch, and dinner as separate events with type "meal". The meals should be at realistic times and include local cuisine options when possible.`;
 
     const generatePlanVariants = async (tripData: any) => {
@@ -125,53 +150,62 @@ export async function POST(request: Request) {
           {
             name: "Local Experience",
             description: "Focus on public transport and local eateries",
-            prompt: "Optimize for lowest costs with authentic local experiences, public transportation, and budget accommodations."
+            prompt:
+              "Optimize for lowest costs with authentic local experiences, public transportation, and budget accommodations.",
           },
           {
             name: "Smart Saver",
             description: "Balance of free attractions and paid activities",
-            prompt: "Mix free attractions with select paid experiences, focus on value-for-money options."
+            prompt:
+              "Mix free attractions with select paid experiences, focus on value-for-money options.",
           },
           {
             name: "Group Adventure",
             description: "Group tours and shared experiences",
-            prompt: "Include group tours, hostel stays, and shared transportation options for budget-conscious travelers."
-          }
+            prompt:
+              "Include group tours, hostel stays, and shared transportation options for budget-conscious travelers.",
+          },
         ],
         MEDIUM: [
           {
             name: "Balanced Explorer",
             description: "Mix of comfort and experiences",
-            prompt: "Balance comfortable accommodations with varied activities, including some premium experiences."
+            prompt:
+              "Balance comfortable accommodations with varied activities, including some premium experiences.",
           },
           {
             name: "Cultural Immersion",
             description: "Focus on local culture and cuisine",
-            prompt: "Emphasize cultural experiences and mid-range dining, with comfortable but not luxury accommodations."
+            prompt:
+              "Emphasize cultural experiences and mid-range dining, with comfortable but not luxury accommodations.",
           },
           {
             name: "Active Discovery",
             description: "Adventure activities and sightseeing",
-            prompt: "Include outdoor activities and guided tours with comfortable accommodations."
-          }
+            prompt:
+              "Include outdoor activities and guided tours with comfortable accommodations.",
+          },
         ],
         HIGH: [
           {
             name: "Luxury Escape",
             description: "Premium accommodations and experiences",
-            prompt: "Focus on luxury hotels, private tours, and fine dining experiences."
+            prompt:
+              "Focus on luxury hotels, private tours, and fine dining experiences.",
           },
           {
             name: "VIP Treatment",
             description: "Exclusive access and private guides",
-            prompt: "Include exclusive experiences, private guides, and premium transportation."
+            prompt:
+              "Include exclusive experiences, private guides, and premium transportation.",
           },
           {
             name: "Gourmet Journey",
             description: "High-end dining and wine experiences",
-            prompt: "Emphasize fine dining, wine tasting, and culinary experiences with luxury accommodations."
-          }
-        ]
+            prompt:
+              "Emphasize fine dining, wine tasting, and culinary experiences with luxury accommodations.",
+          },
+        ],
       };
 
       // Generate plans for the selected budget category only
@@ -181,13 +215,13 @@ export async function POST(request: Request) {
       for (const variant of categoryVariants) {
         const customPrompt = `${prompt}\n${variant.prompt}`;
         const plan = await generateSinglePlan(customPrompt);
-        
+
         variants.push({
           id: variantId++,
           name: variant.name,
           category: selectedCategory,
           description: variant.description,
-          plan: plan
+          plan: plan,
         });
       }
 
@@ -208,7 +242,7 @@ export async function POST(request: Request) {
             {
               role: "system",
               content:
-                "You are a JSON-generating assistant. Output only valid JSON without any markdown formatting, explanations, or code blocks. Every day in the itinerary must include breakfast, lunch, and dinner events with appropriate times.",
+                "You are a JSON-generating assistant. Output only valid JSON without any markdown formatting, explanations, or code blocks. Every day in the itinerary must include breakfast, lunch, and dinner events with appropriate times. ALWAYS include a weather object with temperature, condition, icon, humidity, and windSpeed values.",
             },
             { role: "user", content: customPrompt },
           ],
@@ -243,7 +277,8 @@ export async function POST(request: Request) {
             !tempParsedPlan.overview ||
             !tempParsedPlan.totalBudget ||
             !Array.isArray(tempParsedPlan.dailyItinerary) ||
-            !tempParsedPlan.practicalInfo
+            !tempParsedPlan.practicalInfo ||
+            !tempParsedPlan.weather // Add weather check
           ) {
             console.error("Missing required fields in JSON");
             continue;
@@ -251,30 +286,47 @@ export async function POST(request: Request) {
 
           let hasMissingMeals = false;
           for (const day of tempParsedPlan.dailyItinerary) {
-            const meals = day.events.filter(event => 
-              event.type === "meal" || 
-              event.name.toLowerCase().includes("breakfast") ||
-              event.name.toLowerCase().includes("lunch") ||
-              event.name.toLowerCase().includes("dinner")
+            const meals = day.events.filter(
+              (event) =>
+                event.type === "meal" ||
+                event.name.toLowerCase().includes("breakfast") ||
+                event.name.toLowerCase().includes("lunch") ||
+                event.name.toLowerCase().includes("dinner")
             );
-            
-            const hasBreakfast = meals.some(meal => meal.name.toLowerCase().includes("breakfast"));
-            const hasLunch = meals.some(meal => meal.name.toLowerCase().includes("lunch"));
-            const hasDinner = meals.some(meal => meal.name.toLowerCase().includes("dinner"));
-            
+
+            const hasBreakfast = meals.some((meal) =>
+              meal.name.toLowerCase().includes("breakfast")
+            );
+            const hasLunch = meals.some((meal) =>
+              meal.name.toLowerCase().includes("lunch")
+            );
+            const hasDinner = meals.some((meal) =>
+              meal.name.toLowerCase().includes("dinner")
+            );
+
             if (!hasBreakfast || !hasLunch || !hasDinner) {
-              console.log(`Day ${day.dayNumber} missing meals: ${!hasBreakfast ? 'breakfast ' : ''}${!hasLunch ? 'lunch ' : ''}${!hasDinner ? 'dinner' : ''}`);
+              console.log(
+                `Day ${day.dayNumber} missing meals: ${
+                  !hasBreakfast ? "breakfast " : ""
+                }${!hasLunch ? "lunch " : ""}${!hasDinner ? "dinner" : ""}`
+              );
               hasMissingMeals = true;
               break;
             }
           }
-          
+
           if (hasMissingMeals && attempts < maxAttempts) {
             console.log("Some days missing meals, retrying...");
             continue;
           }
 
           parsedPlan = tempParsedPlan;
+
+          const aiPlanTotalCost = calculateTotalBudget(
+            parsedPlan.dailyItinerary
+          );
+          parsedPlan.totalBudget = `$${aiPlanTotalCost}`;
+
           break;
         } catch (parseError) {
           console.error(`Attempt ${attempts} JSON Parse Error:`, parseError);
@@ -284,13 +336,11 @@ export async function POST(request: Request) {
       }
 
       if (parsedPlan) {
-        const aiPlanTotalCost = calculateTotalBudget(parsedPlan.dailyItinerary);
-        parsedPlan.totalBudget = `$${aiPlanTotalCost}`;
         return parsedPlan;
       }
 
       console.log("All attempts failed, generating fallback plan with meals");
-      
+
       const generateDailyEvents = (date, dayNumber, location) => {
         const events = [
           {
@@ -301,7 +351,7 @@ export async function POST(request: Request) {
             description: `Start your day with a delicious breakfast at a local café in ${location}.`,
             type: "meal",
             bookingRequired: false,
-            bookingUrl: ""
+            bookingUrl: "",
           },
           {
             name: `Explore ${location}`,
@@ -311,7 +361,7 @@ export async function POST(request: Request) {
             description: `Explore the main attractions of ${location}.`,
             type: "attraction",
             bookingRequired: false,
-            bookingUrl: ""
+            bookingUrl: "",
           },
           {
             name: `Lunch at Local Restaurant in ${location}`,
@@ -321,7 +371,7 @@ export async function POST(request: Request) {
             description: `Enjoy local cuisine for lunch at a popular restaurant in ${location}.`,
             type: "meal",
             bookingRequired: false,
-            bookingUrl: ""
+            bookingUrl: "",
           },
           {
             name: `Afternoon Activities in ${location}`,
@@ -331,7 +381,7 @@ export async function POST(request: Request) {
             description: `Spend the afternoon experiencing local culture and activities in ${location}.`,
             type: "attraction",
             bookingRequired: false,
-            bookingUrl: ""
+            bookingUrl: "",
           },
           {
             name: `Dinner at Recommended Restaurant in ${location}`,
@@ -341,41 +391,66 @@ export async function POST(request: Request) {
             description: `End your day with a delicious dinner at a highly rated restaurant in ${location}.`,
             type: "meal",
             bookingRequired: false,
-            bookingUrl: ""
-          }
+            bookingUrl: "",
+          },
         ];
-        
+
         return {
           date: date,
           dayNumber: dayNumber,
           location: location,
-          events: events
+          events: events,
         };
       };
 
       const fallbackPlan = {
-        overview: `A ${tripData.destinations.length}-day trip to ${tripData.destinations.map(d => d.name).join(", ")} with a budget of ${tripData.budget}.`,
+        overview: `A ${
+          tripData.destinations.length
+        }-day trip to ${tripData.destinations
+          .map((d) => d.name)
+          .join(", ")} with a budget of ${tripData.budget}.`,
         totalBudget: "",
         dailyItinerary: tripData.destinations.flatMap((dest) => {
           const start = new Date(dest.startDate);
           const end = new Date(dest.endDate);
           const days = [];
-          
-          for (let day = new Date(start); day <= end; day.setDate(day.getDate() + 1)) {
-            days.push(generateDailyEvents(
-              day.toISOString().split("T")[0],
-              days.length + 1,
-              dest.name
-            ));
+
+          for (
+            let day = new Date(start);
+            day <= end;
+            day.setDate(day.getDate() + 1)
+          ) {
+            days.push(
+              generateDailyEvents(
+                day.toISOString().split("T")[0],
+                days.length + 1,
+                dest.name
+              )
+            );
           }
-          
+
           return days;
         }),
         practicalInfo: {
-          transportation: ["Use public transportation where available", "Consider renting a car for remote locations"],
+          transportation: [
+            "Use public transportation where available",
+            "Consider renting a car for remote locations",
+          ],
           documentation: ["Passport", "Travel insurance", "Hotel reservations"],
-          packingList: ["Comfortable walking shoes", "Weather-appropriate clothing", "Medications", "Travel adapters"]
-        }
+          packingList: [
+            "Comfortable walking shoes",
+            "Weather-appropriate clothing",
+            "Medications",
+            "Travel adapters",
+          ],
+        },
+        weather: {
+          temperature: 22,
+          condition: "Partly Cloudy",
+          icon: "https://openweathermap.org/img/wn/02d@2x.png",
+          humidity: 65,
+          windSpeed: 12,
+        },
       };
 
       const totalCost = calculateTotalBudget(fallbackPlan.dailyItinerary);
@@ -388,10 +463,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       plans: {
-        variants: planVariants
-      }
+        variants: planVariants,
+      },
     });
-
   } catch (error: any) {
     console.error("Error:", error);
     return NextResponse.json(

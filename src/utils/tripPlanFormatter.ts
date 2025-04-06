@@ -16,6 +16,14 @@ export interface DayItinerary {
   events: Event[];
 }
 
+export interface WeatherInfo {
+  temperature: number;
+  condition: string;
+  icon: string;
+  humidity: number;
+  windSpeed: number;
+}
+
 export interface TripPlan {
   overview: string;
   totalBudget: string;
@@ -25,6 +33,7 @@ export interface TripPlan {
     documentation: string[];
     packingList: string[];
   };
+  weather: WeatherInfo;
 }
 
 export interface TripPlanVariant {
@@ -49,6 +58,13 @@ export function formatTripPlan(rawPlan: string): TripPlan {
         transportation: [],
         documentation: [],
         packingList: [],
+      },
+      weather: {
+        temperature: 0,
+        condition: "Unknown",
+        icon: "",
+        humidity: 0,
+        windSpeed: 0,
       },
     };
 

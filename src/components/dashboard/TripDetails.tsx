@@ -4,6 +4,9 @@ import {
   DollarSign,
   MapPin,
   ExternalLink,
+  Thermometer,
+  Droplets,
+  Wind,
 } from "lucide-react";
 
 interface TripDetailsProps {
@@ -61,7 +64,25 @@ export default function TripDetails({ trip }: TripDetailsProps) {
 
     let plan;
     try {
-      plan = JSON.parse(trip.aiPlan);
+      const parsedData = JSON.parse(trip.aiPlan);
+
+      // Handle both direct plan data and variant structure
+      if (
+        parsedData.variants &&
+        Array.isArray(parsedData.variants) &&
+        parsedData.variants.length > 0
+      ) {
+        // If we have variants, use the first variant's plan
+        plan = parsedData.variants[0].plan;
+        console.log("Using plan from variant:", plan);
+      } else if (parsedData.dailyItinerary) {
+        // Direct plan data
+        plan = parsedData;
+        console.log("Using direct plan:", plan);
+      } else {
+        console.error("Unexpected plan structure:", parsedData);
+        throw new Error("Invalid plan structure");
+      }
     } catch (error) {
       console.error("Failed to parse trip plan:", error);
       return (
@@ -98,13 +119,48 @@ export default function TripDetails({ trip }: TripDetailsProps) {
 
     return (
       <div className="space-y-8">
-        {/* Overview and Budget */}
-        <div className="bg-gradient-to-r from-indigo-50 to-blue-50 p-6 rounded-lg">
-          <h4 className="font-semibold text-gray-900 mb-3">Trip Overview</h4>
-          <p className="text-gray-700 mb-4">{plan.overview}</p>
-          <div className="text-xl font-semibold text-indigo-600">
-            Estimated Budget: {plan.totalBudget}
+        {/* Overview, Weather and Budget */}
+        <div className="grid grid-cols-3 gap-6">
+          {/* Overview */}
+          <div className="col-span-2 bg-gradient-to-r from-indigo-50 to-blue-50 p-6 rounded-lg">
+            <h4 className="font-semibold text-gray-900 mb-3">Trip Overview</h4>
+            <p className="text-gray-700 mb-4">{plan.overview}</p>
+            <div className="text-xl font-semibold text-indigo-600">
+              Estimated Budget: {plan.totalBudget}
+            </div>
           </div>
+
+          {/* Weather Card */}
+          {plan.weather && (
+            <div className="bg-gradient-to-br from-sky-50 to-blue-50 p-6 rounded-lg">
+              <h4 className="font-semibold text-gray-900 mb-3">
+                Weather on Arrival
+              </h4>
+              <div className="flex items-center mb-4">
+                <img
+                  src={plan.weather.icon}
+                  alt={plan.weather.condition}
+                  className="w-16 h-16"
+                />
+                <div className="ml-4">
+                  <div className="text-3xl font-bold text-gray-900">
+                    {plan.weather.temperature}°C
+                  </div>
+                  <div className="text-gray-600">{plan.weather.condition}</div>
+                </div>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center text-gray-600">
+                  <Droplets className="h-4 w-4 mr-2" />
+                  Humidity: {plan.weather.humidity}%
+                </div>
+                <div className="flex items-center text-gray-600">
+                  <Wind className="h-4 w-4 mr-2" />
+                  Wind: {plan.weather.windSpeed} km/h
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Daily Itinerary */}
