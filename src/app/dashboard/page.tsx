@@ -6,11 +6,12 @@ import { PlusCircle, Compass } from "lucide-react";
 import TripCard from "@/components/dashboard/TripCard";
 import NewTripForm from "@/components/dashboard/NewTripForm";
 import TripDetails from "@/components/dashboard/TripDetails";
+import { Trip, Destination, NewTripData } from "@/types/trip";
 
 export default function Dashboard() {
   const { user } = useUser();
-  const [trips, setTrips] = useState([]);
-  const [selectedTrip, setSelectedTrip] = useState(null);
+  const [trips, setTrips] = useState<Trip[]>([]);
+  const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
   const [showNewTripForm, setShowNewTripForm] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -36,8 +37,16 @@ export default function Dashboard() {
     }
   };
 
-  const handleCreateTrip = async (tripData: any) => {
+  const handleCreateTrip = async (data: NewTripData) => {
     try {
+      const tripData = {
+        ...data,
+        startDate: data.destinations[0]?.startDate || new Date().toISOString(),
+        endDate:
+          data.destinations[data.destinations.length - 1]?.endDate ||
+          new Date().toISOString(),
+        status: "PLANNING",
+      };
       const response = await fetch("/api/trips", {
         method: "POST",
         headers: {
@@ -48,7 +57,7 @@ export default function Dashboard() {
 
       if (!response.ok) throw new Error("Failed to create trip");
 
-      const newTrip = await response.json();
+      const newTrip = (await response.json()) as Trip;
       setTrips([newTrip, ...trips]);
       setShowNewTripForm(false);
       setSelectedTrip(newTrip);

@@ -52,8 +52,12 @@ export async function POST(req: Request) {
       new Date(dest.endDate),
     ]);
 
-    const startDate = new Date(Math.min(...allDates.map((d) => d.getTime())));
-    const endDate = new Date(Math.max(...allDates.map((d) => d.getTime())));
+    const startDate = new Date(
+      Math.min(...allDates.map((d: Date) => d.getTime()))
+    );
+    const endDate = new Date(
+      Math.max(...allDates.map((d: Date) => d.getTime()))
+    );
 
     const trip = await prisma.trip.create({
       data: {

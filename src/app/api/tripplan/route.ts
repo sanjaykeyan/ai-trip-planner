@@ -11,6 +11,30 @@ interface Day {
 
 type Itinerary = Day[];
 
+interface Destination {
+  name: string;
+  startDate: string;
+  endDate: string;
+}
+
+type BudgetCategory = "LOW" | "MEDIUM" | "HIGH";
+
+interface BudgetVariant {
+  name: string;
+  description: string;
+  prompt: string;
+}
+
+interface TripData {
+  title: string;
+  budget: BudgetCategory;
+  preferences: string[];
+  destinations: Destination[];
+}
+
+export const maxDuration = 300; // Set max duration to 300 seconds (5 minutes)
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: Request) {
   if (!process.env.GROQ_API_KEY) {
     return NextResponse.json(
@@ -35,7 +59,7 @@ export async function POST(request: Request) {
       apiKey: process.env.GROQ_API_KEY,
     });
 
-    const tripData = await request.json();
+    const tripData: TripData = await request.json();
 
     const prompt = `You are a travel planner creating an itinerary. Return ONLY valid JSON with no additional text, comments, or backticks.
 
@@ -151,11 +175,11 @@ export async function POST(request: Request) {
     
     IMPORTANT: Every day in the dailyItinerary MUST include breakfast, lunch, and dinner as separate events with type "meal". The meals should be at realistic times and include local cuisine options when possible.`;
 
-    const generatePlanVariants = async (tripData: any) => {
+    const generatePlanVariants = async (tripData: TripData) => {
       const variants = [];
       let variantId = 1;
 
-      const budgetCategories = {
+      const budgetCategories: Record<BudgetCategory, BudgetVariant[]> = {
         LOW: [
           {
             name: "Local Experience",
@@ -218,7 +242,6 @@ export async function POST(request: Request) {
         ],
       };
 
-      // Generate plans for the selected budget category only
       const selectedCategory = tripData.budget;
       const categoryVariants = budgetCategories[selectedCategory];
 
@@ -243,115 +266,133 @@ export async function POST(request: Request) {
       let attempts = 0;
       const maxAttempts = 2;
 
+      // Set a timeout for the Groq API call
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('API call timed out')), 240000) // 4 minute timeout
+      );
+
       while (!parsedPlan && attempts < maxAttempts) {
         attempts++;
         console.log(`Attempt ${attempts} to generate trip plan`);
 
-        const completion = await groq.chat.completions.create({
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are a JSON-generating assistant. Output only valid JSON without any markdown formatting, explanations, or code blocks. Every day in the itinerary must include breakfast, lunch, and dinner events with appropriate times. ALWAYS include a weather object with temperature, condition, icon, humidity, and windSpeed values.",
-            },
-            { role: "user", content: customPrompt },
-          ],
-          model: "llama-3.3-70b-versatile",
-          temperature: attempts > 1 ? 0.7 : 0.5,
-          max_tokens: 4096,
-        });
-
-        const rawPlan = completion.choices[0]?.message?.content;
-
-        if (!rawPlan) {
-          console.error("No content returned from LLM");
-          continue;
-        }
-
-        let cleanedPlan = rawPlan
-          .trim()
-          .replace(/```json\s*|```\s*|`/g, "")
-          .replace(/(\r\n|\n|\r)/gm, " ")
-          .replace(/\s+/g, " ")
-          .trim();
-
-        const jsonMatch = cleanedPlan.match(/({.*})/);
-        if (jsonMatch && jsonMatch[1]) {
-          cleanedPlan = jsonMatch[1];
-        }
-
         try {
-          const tempParsedPlan = JSON.parse(cleanedPlan);
+          // Race the API call against the timeout
+          const completion = await Promise.race([
+            groq.chat.completions.create({
+              messages: [
+                {
+                  role: "system",
+                  content:
+                    "You are a JSON-generating assistant. Output only valid JSON without any markdown formatting, explanations, or code blocks. Every day in the itinerary must include breakfast, lunch, and dinner events with appropriate times. ALWAYS include a weather object with temperature, condition, icon, humidity, and windSpeed values.",
+                },
+                { role: "user", content: customPrompt },
+              ],
+              model: "llama-3.3-70b-versatile",
+              temperature: attempts > 1 ? 0.7 : 0.5,
+              max_tokens: 4096,
+            }),
+            timeoutPromise
+          ]) as any;
 
-          if (
-            !tempParsedPlan.overview ||
-            !tempParsedPlan.totalBudget ||
-            !Array.isArray(tempParsedPlan.dailyItinerary) ||
-            !tempParsedPlan.practicalInfo ||
-            !tempParsedPlan.weather // Add weather check
-          ) {
-            console.error("Missing required fields in JSON");
-            continue;
+          const rawPlan = completion.choices[0]?.message?.content;
+
+          let cleanedPlan = rawPlan
+            .trim()
+            .replace(/```json\s*|```\s*|`/g, "")
+            .replace(/(\r\n|\n|\r)/gm, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+
+          const jsonMatch = cleanedPlan.match(/({.*})/);
+          if (jsonMatch && jsonMatch[1]) {
+            cleanedPlan = jsonMatch[1];
           }
 
-          let hasMissingMeals = false;
-          for (const day of tempParsedPlan.dailyItinerary) {
-            const meals = day.events.filter(
-              (event) =>
-                event.type === "meal" ||
-                event.name.toLowerCase().includes("breakfast") ||
-                event.name.toLowerCase().includes("lunch") ||
-                event.name.toLowerCase().includes("dinner")
-            );
+          try {
+            const tempParsedPlan = JSON.parse(cleanedPlan);
 
-            const hasBreakfast = meals.some((meal) =>
-              meal.name.toLowerCase().includes("breakfast")
-            );
-            const hasLunch = meals.some((meal) =>
-              meal.name.toLowerCase().includes("lunch")
-            );
-            const hasDinner = meals.some((meal) =>
-              meal.name.toLowerCase().includes("dinner")
-            );
-
-            if (!hasBreakfast || !hasLunch || !hasDinner) {
-              console.log(
-                `Day ${day.dayNumber} missing meals: ${
-                  !hasBreakfast ? "breakfast " : ""
-                }${!hasLunch ? "lunch " : ""}${!hasDinner ? "dinner" : ""}`
-              );
-              hasMissingMeals = true;
-              break;
+            if (
+              !tempParsedPlan.overview ||
+              !tempParsedPlan.totalBudget ||
+              !Array.isArray(tempParsedPlan.dailyItinerary) ||
+              !tempParsedPlan.practicalInfo ||
+              !tempParsedPlan.weather
+            ) {
+              console.error("Missing required fields in JSON");
+              continue;
             }
+
+            let hasMissingMeals = false;
+            for (const day of tempParsedPlan.dailyItinerary) {
+              const meals = day.events.filter(
+                (event: { type: string; name: string }) =>
+                  event.type === "meal" ||
+                  event.name.toLowerCase().includes("breakfast") ||
+                  event.name.toLowerCase().includes("lunch") ||
+                  event.name.toLowerCase().includes("dinner")
+              );
+
+              const hasBreakfast = meals.some((meal: { name: string }) =>
+                meal.name.toLowerCase().includes("breakfast")
+              );
+              const hasLunch = meals.some((meal: { name: string }) =>
+                meal.name.toLowerCase().includes("lunch")
+              );
+              const hasDinner = meals.some((meal: { name: string }) =>
+                meal.name.toLowerCase().includes("dinner")
+              );
+
+              if (!hasBreakfast || !hasLunch || !hasDinner) {
+                console.log(
+                  `Day ${day.dayNumber} missing meals: ${
+                    !hasBreakfast ? "breakfast " : ""
+                  }${!hasLunch ? "lunch " : ""}${!hasDinner ? "dinner" : ""}`
+                );
+                hasMissingMeals = true;
+                break;
+              }
+            }
+
+            if (hasMissingMeals && attempts < maxAttempts) {
+              console.log("Some days missing meals, retrying...");
+              continue;
+            }
+
+            parsedPlan = tempParsedPlan;
+
+            const aiPlanTotalCost = calculateTotalBudget(
+              parsedPlan.dailyItinerary
+            );
+            parsedPlan.totalBudget = `$${aiPlanTotalCost}`;
+
+            break;
+          } catch (parseError) {
+            console.error(`Attempt ${attempts} JSON Parse Error:`, parseError);
+            console.error("Raw response:", rawPlan);
+            console.error("Cleaned response:", cleanedPlan);
           }
-
-          if (hasMissingMeals && attempts < maxAttempts) {
-            console.log("Some days missing meals, retrying...");
-            continue;
+        } catch (apiError) {
+          console.error(`API call error on attempt ${attempts}:`, apiError);
+          
+          // If we timeout and it's the last attempt, use fallback plan
+          if (attempts >= maxAttempts) {
+            console.log("API calls timed out, generating fallback plan");
+            break;
           }
-
-          parsedPlan = tempParsedPlan;
-
-          const aiPlanTotalCost = calculateTotalBudget(
-            parsedPlan.dailyItinerary
-          );
-          parsedPlan.totalBudget = `$${aiPlanTotalCost}`;
-
-          break;
-        } catch (parseError) {
-          console.error(`Attempt ${attempts} JSON Parse Error:`, parseError);
-          console.error("Raw response:", rawPlan);
-          console.error("Cleaned response:", cleanedPlan);
         }
       }
 
-      if (parsedPlan) {
-        return parsedPlan;
-      }
+      return parsedPlan || generateFallbackPlan();
+    };
 
-      console.log("All attempts failed, generating fallback plan with meals");
+    const generateFallbackPlan = () => {
+      console.log("Generating fallback plan with meals");
 
-      const generateDailyEvents = (date, dayNumber, location) => {
+      const generateDailyEvents = (
+        date: string,
+        dayNumber: number,
+        location: string
+      ) => {
         const events = [
           {
             name: `Breakfast at Local Café in ${location}`,
@@ -469,7 +510,28 @@ export async function POST(request: Request) {
       return fallbackPlan;
     };
 
-    const planVariants = await generatePlanVariants(tripData);
+    const generatePlanWithTimeout = async () => {
+      try {
+        // Set a shorter timeout than Vercel's limit to ensure we respond
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Plan generation timed out')), 270000) // 4.5 minute timeout
+        );
+        
+        return await Promise.race([generatePlanVariants(tripData), timeoutPromise]);
+      } catch (error) {
+        console.error("Plan generation timed out:", error);
+        // Return a simplified response with just one fallback plan
+        return [{
+          id: 1,
+          name: "Simple Itinerary",
+          category: tripData.budget,
+          description: "A basic travel plan created due to timeout constraints.",
+          plan: generateFallbackPlan()
+        }];
+      }
+    };
+
+    const planVariants = await generatePlanWithTimeout();
 
     return NextResponse.json({
       plans: {
