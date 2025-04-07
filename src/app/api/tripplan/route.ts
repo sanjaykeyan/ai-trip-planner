@@ -1,6 +1,16 @@
 import { Groq } from "groq-sdk";
 import { NextResponse } from "next/server";
 
+interface Event {
+  cost: string;
+}
+
+interface Day {
+  events: Event[];
+}
+
+type Itinerary = Day[];
+
 export async function POST(request: Request) {
   if (!process.env.GROQ_API_KEY) {
     return NextResponse.json(
@@ -10,7 +20,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const calculateTotalBudget = (itinerary) => {
+    const calculateTotalBudget = (itinerary: Itinerary) => {
       let total = 0;
       itinerary.forEach((day) => {
         day.events.forEach((event) => {
