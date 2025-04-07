@@ -6,11 +6,7 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "postinstall": "node prisma/postinstall.js",
-    "vercel-build": "prisma generate && npm run db:deploy",
-    "db:deploy": "node prisma/handle-migrations.js",
-    "prisma:baseline": "prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > prisma/migrations/baseline.sql && prisma migrate resolve --applied baseline"
+    "lint": "next lint"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.13.0",
