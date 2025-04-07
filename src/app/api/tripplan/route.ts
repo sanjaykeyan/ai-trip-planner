@@ -11,6 +11,27 @@ interface Day {
 
 type Itinerary = Day[];
 
+interface Destination {
+  name: string;
+  startDate: string;
+  endDate: string;
+}
+
+type BudgetCategory = "LOW" | "MEDIUM" | "HIGH";
+
+interface BudgetVariant {
+  name: string;
+  description: string;
+  prompt: string;
+}
+
+interface TripData {
+  title: string;
+  budget: BudgetCategory;
+  preferences: string[];
+  destinations: Destination[];
+}
+
 export async function POST(request: Request) {
   if (!process.env.GROQ_API_KEY) {
     return NextResponse.json(
@@ -35,7 +56,7 @@ export async function POST(request: Request) {
       apiKey: process.env.GROQ_API_KEY,
     });
 
-    const tripData = await request.json();
+    const tripData: TripData = await request.json();
 
     const prompt = `You are a travel planner creating an itinerary. Return ONLY valid JSON with no additional text, comments, or backticks.
 
@@ -151,11 +172,11 @@ export async function POST(request: Request) {
     
     IMPORTANT: Every day in the dailyItinerary MUST include breakfast, lunch, and dinner as separate events with type "meal". The meals should be at realistic times and include local cuisine options when possible.`;
 
-    const generatePlanVariants = async (tripData: any) => {
+    const generatePlanVariants = async (tripData: TripData) => {
       const variants = [];
       let variantId = 1;
 
-      const budgetCategories = {
+      const budgetCategories: Record<BudgetCategory, BudgetVariant[]> = {
         LOW: [
           {
             name: "Local Experience",
@@ -218,7 +239,6 @@ export async function POST(request: Request) {
         ],
       };
 
-      // Generate plans for the selected budget category only
       const selectedCategory = tripData.budget;
       const categoryVariants = budgetCategories[selectedCategory];
 
@@ -288,7 +308,7 @@ export async function POST(request: Request) {
             !tempParsedPlan.totalBudget ||
             !Array.isArray(tempParsedPlan.dailyItinerary) ||
             !tempParsedPlan.practicalInfo ||
-            !tempParsedPlan.weather // Add weather check
+            !tempParsedPlan.weather
           ) {
             console.error("Missing required fields in JSON");
             continue;
@@ -297,20 +317,20 @@ export async function POST(request: Request) {
           let hasMissingMeals = false;
           for (const day of tempParsedPlan.dailyItinerary) {
             const meals = day.events.filter(
-              (event) =>
+              (event: { type: string; name: string }) =>
                 event.type === "meal" ||
                 event.name.toLowerCase().includes("breakfast") ||
                 event.name.toLowerCase().includes("lunch") ||
                 event.name.toLowerCase().includes("dinner")
             );
 
-            const hasBreakfast = meals.some((meal) =>
+            const hasBreakfast = meals.some((meal: { name: string }) =>
               meal.name.toLowerCase().includes("breakfast")
             );
-            const hasLunch = meals.some((meal) =>
+            const hasLunch = meals.some((meal: { name: string }) =>
               meal.name.toLowerCase().includes("lunch")
             );
-            const hasDinner = meals.some((meal) =>
+            const hasDinner = meals.some((meal: { name: string }) =>
               meal.name.toLowerCase().includes("dinner")
             );
 
@@ -351,7 +371,11 @@ export async function POST(request: Request) {
 
       console.log("All attempts failed, generating fallback plan with meals");
 
-      const generateDailyEvents = (date, dayNumber, location) => {
+      const generateDailyEvents = (
+        date: string,
+        dayNumber: number,
+        location: string
+      ) => {
         const events = [
           {
             name: `Breakfast at Local Café in ${location}`,
