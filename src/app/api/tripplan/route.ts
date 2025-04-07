@@ -25,6 +25,34 @@ interface BudgetVariant {
   prompt: string;
 }
 
+const budgetCategories: Record<BudgetCategory, BudgetVariant[]> = {
+  LOW: [
+    {
+      name: "Budget Friendly",
+      description:
+        "A cost-effective itinerary focused on value and affordability.",
+      prompt:
+        "Focus on budget-friendly options, free attractions, and affordable dining.",
+    },
+  ],
+  MEDIUM: [
+    {
+      name: "Balanced Experience",
+      description: "A mix of moderate and premium experiences.",
+      prompt:
+        "Include a mix of affordable and moderately priced activities and dining options.",
+    },
+  ],
+  HIGH: [
+    {
+      name: "Luxury Experience",
+      description: "Premium experiences and upscale accommodations.",
+      prompt:
+        "Focus on high-end restaurants, luxury activities, and premium experiences.",
+    },
+  ],
+};
+
 interface TripData {
   title: string;
   budget: BudgetCategory;
@@ -32,8 +60,7 @@ interface TripData {
   destinations: Destination[];
 }
 
-export const maxDuration = 300; // Set max duration to 300 seconds (5 minutes)
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   if (!process.env.GROQ_API_KEY) {
@@ -175,214 +202,115 @@ export async function POST(request: Request) {
     
     IMPORTANT: Every day in the dailyItinerary MUST include breakfast, lunch, and dinner as separate events with type "meal". The meals should be at realistic times and include local cuisine options when possible.`;
 
-    const generatePlanVariants = async (tripData: TripData) => {
-      const variants = [];
-      let variantId = 1;
-
-      const budgetCategories: Record<BudgetCategory, BudgetVariant[]> = {
-        LOW: [
-          {
-            name: "Local Experience",
-            description: "Focus on public transport and local eateries",
-            prompt:
-              "Optimize for lowest costs with authentic local experiences, public transportation, and budget accommodations.",
-          },
-          {
-            name: "Smart Saver",
-            description: "Balance of free attractions and paid activities",
-            prompt:
-              "Mix free attractions with select paid experiences, focus on value-for-money options.",
-          },
-          {
-            name: "Group Adventure",
-            description: "Group tours and shared experiences",
-            prompt:
-              "Include group tours, hostel stays, and shared transportation options for budget-conscious travelers.",
-          },
-        ],
-        MEDIUM: [
-          {
-            name: "Balanced Explorer",
-            description: "Mix of comfort and experiences",
-            prompt:
-              "Balance comfortable accommodations with varied activities, including some premium experiences.",
-          },
-          {
-            name: "Cultural Immersion",
-            description: "Focus on local culture and cuisine",
-            prompt:
-              "Emphasize cultural experiences and mid-range dining, with comfortable but not luxury accommodations.",
-          },
-          {
-            name: "Active Discovery",
-            description: "Adventure activities and sightseeing",
-            prompt:
-              "Include outdoor activities and guided tours with comfortable accommodations.",
-          },
-        ],
-        HIGH: [
-          {
-            name: "Luxury Escape",
-            description: "Premium accommodations and experiences",
-            prompt:
-              "Focus on luxury hotels, private tours, and fine dining experiences.",
-          },
-          {
-            name: "VIP Treatment",
-            description: "Exclusive access and private guides",
-            prompt:
-              "Include exclusive experiences, private guides, and premium transportation.",
-          },
-          {
-            name: "Gourmet Journey",
-            description: "High-end dining and wine experiences",
-            prompt:
-              "Emphasize fine dining, wine tasting, and culinary experiences with luxury accommodations.",
-          },
-        ],
-      };
-
-      const selectedCategory = tripData.budget;
-      const categoryVariants = budgetCategories[selectedCategory];
-
-      for (const variant of categoryVariants) {
-        const customPrompt = `${prompt}\n${variant.prompt}`;
-        const plan = await generateSinglePlan(customPrompt);
-
-        variants.push({
-          id: variantId++,
-          name: variant.name,
-          category: selectedCategory,
-          description: variant.description,
-          plan: plan,
-        });
-      }
-
-      return variants;
-    };
-
     const generateSinglePlan = async (customPrompt: string) => {
       let parsedPlan = null;
-      let attempts = 0;
-      const maxAttempts = 2;
+      const maxAttempts = 1; // Reduce to 1 attempt to save time
 
-      // Set a timeout for the Groq API call
+      // Reduce timeout to 45 seconds to ensure we stay within Vercel's 60-second limit
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('API call timed out')), 240000) // 4 minute timeout
+        setTimeout(() => reject(new Error("API call timed out")), 45000)
       );
 
-      while (!parsedPlan && attempts < maxAttempts) {
-        attempts++;
-        console.log(`Attempt ${attempts} to generate trip plan`);
+      try {
+        const completion = (await Promise.race([
+          groq.chat.completions.create({
+            messages: [
+              {
+                role: "system",
+                content:
+                  "You are a JSON-generating assistant. Output only valid JSON without any markdown formatting, explanations, or code blocks. Every day in the itinerary must include breakfast, lunch, and dinner events with appropriate times. ALWAYS include a weather object with temperature, condition, icon, humidity, and windSpeed values.",
+              },
+              { role: "user", content: customPrompt },
+            ],
+            model: "llama-3.3-70b-versatile",
+            temperature: 0.5,
+            max_tokens: 2048, // Reduce tokens to speed up response
+          }),
+          timeoutPromise,
+        ])) as any;
+
+        const rawPlan = completion.choices[0]?.message?.content;
+
+        let cleanedPlan = rawPlan
+          .trim()
+          .replace(/```json\s*|```\s*|`/g, "")
+          .replace(/(\r\n|\n|\r)/gm, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+
+        const jsonMatch = cleanedPlan.match(/({.*})/);
+        if (jsonMatch && jsonMatch[1]) {
+          cleanedPlan = jsonMatch[1];
+        }
 
         try {
-          // Race the API call against the timeout
-          const completion = await Promise.race([
-            groq.chat.completions.create({
-              messages: [
-                {
-                  role: "system",
-                  content:
-                    "You are a JSON-generating assistant. Output only valid JSON without any markdown formatting, explanations, or code blocks. Every day in the itinerary must include breakfast, lunch, and dinner events with appropriate times. ALWAYS include a weather object with temperature, condition, icon, humidity, and windSpeed values.",
-                },
-                { role: "user", content: customPrompt },
-              ],
-              model: "llama-3.3-70b-versatile",
-              temperature: attempts > 1 ? 0.7 : 0.5,
-              max_tokens: 4096,
-            }),
-            timeoutPromise
-          ]) as any;
+          const tempParsedPlan = JSON.parse(cleanedPlan);
 
-          const rawPlan = completion.choices[0]?.message?.content;
-
-          let cleanedPlan = rawPlan
-            .trim()
-            .replace(/```json\s*|```\s*|`/g, "")
-            .replace(/(\r\n|\n|\r)/gm, " ")
-            .replace(/\s+/g, " ")
-            .trim();
-
-          const jsonMatch = cleanedPlan.match(/({.*})/);
-          if (jsonMatch && jsonMatch[1]) {
-            cleanedPlan = jsonMatch[1];
+          if (
+            !tempParsedPlan.overview ||
+            !tempParsedPlan.totalBudget ||
+            !Array.isArray(tempParsedPlan.dailyItinerary) ||
+            !tempParsedPlan.practicalInfo ||
+            !tempParsedPlan.weather
+          ) {
+            console.error("Missing required fields in JSON");
+            return generateFallbackPlan();
           }
 
-          try {
-            const tempParsedPlan = JSON.parse(cleanedPlan);
-
-            if (
-              !tempParsedPlan.overview ||
-              !tempParsedPlan.totalBudget ||
-              !Array.isArray(tempParsedPlan.dailyItinerary) ||
-              !tempParsedPlan.practicalInfo ||
-              !tempParsedPlan.weather
-            ) {
-              console.error("Missing required fields in JSON");
-              continue;
-            }
-
-            let hasMissingMeals = false;
-            for (const day of tempParsedPlan.dailyItinerary) {
-              const meals = day.events.filter(
-                (event: { type: string; name: string }) =>
-                  event.type === "meal" ||
-                  event.name.toLowerCase().includes("breakfast") ||
-                  event.name.toLowerCase().includes("lunch") ||
-                  event.name.toLowerCase().includes("dinner")
-              );
-
-              const hasBreakfast = meals.some((meal: { name: string }) =>
-                meal.name.toLowerCase().includes("breakfast")
-              );
-              const hasLunch = meals.some((meal: { name: string }) =>
-                meal.name.toLowerCase().includes("lunch")
-              );
-              const hasDinner = meals.some((meal: { name: string }) =>
-                meal.name.toLowerCase().includes("dinner")
-              );
-
-              if (!hasBreakfast || !hasLunch || !hasDinner) {
-                console.log(
-                  `Day ${day.dayNumber} missing meals: ${
-                    !hasBreakfast ? "breakfast " : ""
-                  }${!hasLunch ? "lunch " : ""}${!hasDinner ? "dinner" : ""}`
-                );
-                hasMissingMeals = true;
-                break;
-              }
-            }
-
-            if (hasMissingMeals && attempts < maxAttempts) {
-              console.log("Some days missing meals, retrying...");
-              continue;
-            }
-
-            parsedPlan = tempParsedPlan;
-
-            const aiPlanTotalCost = calculateTotalBudget(
-              parsedPlan.dailyItinerary
+          let hasMissingMeals = false;
+          for (const day of tempParsedPlan.dailyItinerary) {
+            const meals = day.events.filter(
+              (event: { type: string; name: string }) =>
+                event.type === "meal" ||
+                event.name.toLowerCase().includes("breakfast") ||
+                event.name.toLowerCase().includes("lunch") ||
+                event.name.toLowerCase().includes("dinner")
             );
-            parsedPlan.totalBudget = `$${aiPlanTotalCost}`;
 
-            break;
-          } catch (parseError) {
-            console.error(`Attempt ${attempts} JSON Parse Error:`, parseError);
-            console.error("Raw response:", rawPlan);
-            console.error("Cleaned response:", cleanedPlan);
+            const hasBreakfast = meals.some((meal: { name: string }) =>
+              meal.name.toLowerCase().includes("breakfast")
+            );
+            const hasLunch = meals.some((meal: { name: string }) =>
+              meal.name.toLowerCase().includes("lunch")
+            );
+            const hasDinner = meals.some((meal: { name: string }) =>
+              meal.name.toLowerCase().includes("dinner")
+            );
+
+            if (!hasBreakfast || !hasLunch || !hasDinner) {
+              console.log(
+                `Day ${day.dayNumber} missing meals: ${
+                  !hasBreakfast ? "breakfast " : ""
+                }${!hasLunch ? "lunch " : ""}${!hasDinner ? "dinner" : ""}`
+              );
+              hasMissingMeals = true;
+              break;
+            }
           }
-        } catch (apiError) {
-          console.error(`API call error on attempt ${attempts}:`, apiError);
-          
-          // If we timeout and it's the last attempt, use fallback plan
-          if (attempts >= maxAttempts) {
-            console.log("API calls timed out, generating fallback plan");
-            break;
+
+          if (hasMissingMeals) {
+            console.log("Some days missing meals, generating fallback plan...");
+            return generateFallbackPlan();
           }
+
+          parsedPlan = tempParsedPlan;
+
+          const aiPlanTotalCost = calculateTotalBudget(
+            parsedPlan.dailyItinerary
+          );
+          parsedPlan.totalBudget = `$${aiPlanTotalCost}`;
+
+          return parsedPlan;
+        } catch (parseError) {
+          console.error("JSON Parse Error:", parseError);
+          console.error("Raw response:", rawPlan);
+          console.error("Cleaned response:", cleanedPlan);
+          return generateFallbackPlan();
         }
+      } catch (error) {
+        console.error("API call error:", error);
+        return generateFallbackPlan();
       }
-
-      return parsedPlan || generateFallbackPlan();
     };
 
     const generateFallbackPlan = () => {
@@ -510,28 +438,49 @@ export async function POST(request: Request) {
       return fallbackPlan;
     };
 
-    const generatePlanWithTimeout = async () => {
+    const generatePlanVariants = async (tripData: TripData) => {
+      // Reduce to only generate one variant to stay within time limit
+      const selectedCategory = tripData.budget;
+      const variant = budgetCategories[selectedCategory][0];
+
       try {
-        // Set a shorter timeout than Vercel's limit to ensure we respond
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Plan generation timed out')), 270000) // 4.5 minute timeout
+          setTimeout(
+            () => reject(new Error("Plan generation timed out")),
+            50000
+          )
         );
-        
-        return await Promise.race([generatePlanVariants(tripData), timeoutPromise]);
+
+        const plan = await Promise.race([
+          generateSinglePlan(`${prompt}\n${variant.prompt}`),
+          timeoutPromise,
+        ]);
+
+        return [
+          {
+            id: 1,
+            name: variant.name,
+            category: selectedCategory,
+            description: variant.description,
+            plan: plan,
+          },
+        ];
       } catch (error) {
         console.error("Plan generation timed out:", error);
-        // Return a simplified response with just one fallback plan
-        return [{
-          id: 1,
-          name: "Simple Itinerary",
-          category: tripData.budget,
-          description: "A basic travel plan created due to timeout constraints.",
-          plan: generateFallbackPlan()
-        }];
+        return [
+          {
+            id: 1,
+            name: "Simple Itinerary",
+            category: tripData.budget,
+            description:
+              "A basic travel plan created due to timeout constraints.",
+            plan: generateFallbackPlan(),
+          },
+        ];
       }
     };
 
-    const planVariants = await generatePlanWithTimeout();
+    const planVariants = await generatePlanVariants(tripData);
 
     return NextResponse.json({
       plans: {
