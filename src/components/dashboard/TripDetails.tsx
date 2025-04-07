@@ -139,7 +139,7 @@ export default function TripDetails({ trip }: TripDetailsProps) {
 
     // Check if this is a fallback plan with no events
     const isEmptyPlan = plan.dailyItinerary.every(
-      (day) => day.events.length === 0
+      (day: { events: string | any[] }) => day.events.length === 0
     );
 
     if (isEmptyPlan) {
